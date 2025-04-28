@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lullaboo Data Transfer Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .campus-list {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .campus-item {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .campus-item.selected {
+            background-color: #e7f3e8;
+            border-color: #4CAF50;
+        }
+        .log-console {
+            background-color: #222;
+            color: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .log-info { color: #63c563; }
+        .log-error { color: #ff7575; }
+        .log-debug { color: #75b5ff; }
+        .progress-bar-container {
+            width: 100%;
+            background-color: #ddd;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            height: 20px;
+            border-radius: 4px;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+            font-size: 12px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 16px;
+            color: #333;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            background-color: white;
+        }
+        .status-panel {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .status-box {
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .status-box.success { background-color: #e7f3e8; border: 1px solid #4CAF50; }
+        .status-box.warning { background-color: #fff8e1; border: 1px solid #ffb300; }
+        .status-box.error { background-color: #ffebee; border: 1px solid #f44336; }
+        .campus-status-list {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .campus-status-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 3fr;
+            background-color: #f5f5f5;
+            padding: 10px;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+        }
+        .campus-status-item {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 3fr;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .campus-status-item:last-child {
+            border-bottom: none;
+        }
+        .campus-status-item.completed { background-color: #f0fff0; }
+        .campus-status-item.error { background-color: #fff0f0; }
+        .campus-status-item.processing { background-color: #fffff0; }
+        .alert {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .alert-success {
+            background-color: #dff0d8;
+            border: 1px solid #d0e9c6;
+            color: #3c763d;
+        }
+        .alert-warning {
+            background-color: #fcf8e3;
+            border: 1px solid #faf2cc;
+            color: #8a6d3b;
+        }
+        .alert-error {
+            background-color: #f2dede;
+            border: 1px solid #ebcccc;
+            color: #a94442;
+        }
+        .transfer-type-selector {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .transfer-type-option {
+            flex: 1;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .transfer-type-option:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .transfer-type-option.selected {
+            border-color: #4CAF50;
+            background-color: #e7f3e8;
+        }
+        .transfer-type-option h3 {
+            margin-top: 0;
+        }
+        .parameter-input {
+            margin-top: 15px;
+            display: none;
+        }
+        .parameter-input.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lullaboo Data Transfer Tool</h1>
+
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'Transfer')">Data Transfer</button>
+            <button class="tablinks" onclick="openTab(event, 'Config')">Configuration</button>
+            <button class="tablinks" onclick="openTab(event, 'About')">About</button>
+        </div>
+
+        <div id="Transfer" class="tabcontent" style="display: block;">
+            <h2>Transfer Data</h2>
+            
+            <div class="transfer-type-selector">
+                <div class="transfer-type-option selected" data-type="childSchedule">
+                    <h3>Child Schedule</h3>
+                    <p>Transfer child schedule data from FileMaker to Firebase</p>
+                </div>
+                <div class="transfer-type-option" data-type="authorization">
+                    <h3>Child Authorization</h3>
+                    <p>Transfer authorization data from FileMaker to Firebase</p>
+                </div>
+            </div>
+            
+            <!-- Authorization template ID input (only visible when authorization is selected) -->
+            <div id="authorizationParams" class="parameter-input">
+                <div class="form-group">
+                    <label for="authorizationTemplateId">Authorization Template ID:</label>
+                    <input type="text" id="authorizationTemplateId" value="9CAE0F2C-B54E-42E4-9163-2F8A83925FAC" 
+                           placeholder="Enter Authorization Template ID">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Select Campuses:</label>
+                <div class="campus-list" id="campusList">
+                    <!-- Will be populated dynamically -->
+                </div>
+                <button id="selectAllBtn">Select All</button>
+                <button id="deselectAllBtn">Deselect All</button>
+            </div>
+
+            <div class="form-group">
+                <button id="startTransferBtn">Start Data Transfer</button>
+                <button id="stopTransferBtn" disabled>Stop Transfer</button>
+            </div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar">0%</div>
+            </div>
+
+            <div class="status-panel">
+                <div class="status-box success">
+                    <h3>Total Campuses</h3>
+                    <div id="totalCampuses">0</div>
+                </div>
+                <div class="status-box warning">
+                    <h3>In Progress</h3>
+                    <div id="inProgressCount">0</div>
+                </div>
+                <div class="status-box success">
+                    <h3>Records Processed</h3>
+                    <div id="recordsProcessed">0</div>
+                </div>
+            </div>
+
+            <h3>Log Console</h3>
+            <div class="log-console" id="logConsole"></div>
+        </div>
+
+        <div id="Config" class="tabcontent">
+            <h2>Configuration Settings</h2>
+            
+            <div class="form-group">
+                <label for="filemakerUsername">FileMaker Username:</label>
+                <input type="text" id="filemakerUsername" placeholder="Enter FileMaker username">
+            </div>
+            
+            <div class="form-group">
+                <label for="filemakerPassword">FileMaker Password:</label>
+                <input type="password" id="filemakerPassword" placeholder="Enter FileMaker password">
+            </div>
+            
+            <div class="form-group">
+                <label for="firebaseUrlSchedule">Firebase URL (Child Schedule):</label>
+                <input type="text" id="firebaseUrlSchedule" placeholder="https://child-schedule.firebaseio.com/">
+            </div>
+            
+            <div class="form-group">
+                <label for="firebaseUrlAuth">Firebase URL (Authorization):</label>
+                <input type="text" id="firebaseUrlAuth" placeholder="https://authorization-line-ltem-answer.firebaseio.com/">
+            </div>
+            
+            <div class="form-group">
+                <label for="serviceAccountKey">Service Account Key (JSON):</label>
+                <textarea id="serviceAccountKey" rows="5" placeholder="Paste your Firebase service account key JSON here"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <button id="saveConfigBtn">Save Configuration</button>
+                <button id="testConnectionBtn">Test Connection</button>
+            </div>
+        </div>
+
+        <div id="About" class="tabcontent">
+            <h2>About This Tool</h2>
+            <p>This tool facilitates the transfer of data from FileMaker databases to Firebase Realtime Database.</p>
+            <h3>Features:</h3>
+            <ul>
+                <li>Transfer Child Schedule Data: Connect to multiple FileMaker databases (one per campus) and transfer child schedule data to Firebase</li>
+                <li>Transfer Authorization Data: Transfer child authorization data for a specific template ID to Firebase</li>
+                <li>Monitor transfer progress and view logs</li>
+                <li>Select specific campuses to process</li>
+            </ul>
+            <p>For support or questions, please contact your administrator.</p>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const campusList = document.getElementById('campusList');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        const deselectAllBtn = document.getElementById('deselectAllBtn');
+        const startTransferBtn = document.getElementById('startTransferBtn');
+        const stopTransferBtn = document.getElementById('stopTransferBtn');
+        const progressBar = document.getElementById('progressBar');
+        const logConsole = document.getElementById('logConsole');
+        const totalCampusesElement = document.getElementById('totalCampuses');
+        const inProgressCountElement = document.getElementById('inProgressCount');
+        const recordsProcessedElement = document.getElementById('recordsProcessed');
+        const transferTypeOptions = document.querySelectorAll('.transfer-type-option');
+        const authorizationParams = document.getElementById('authorizationParams');
+        const authorizationTemplateId = document.getElementById('authorizationTemplateId');
+
+        // Config elements
+        const filemakerUsername = document.getElementById('filemakerUsername');
+        const filemakerPassword = document.getElementById('filemakerPassword');
+        const firebaseUrlSchedule = document.getElementById('firebaseUrlSchedule');
+        const firebaseUrlAuth = document.getElementById('firebaseUrlAuth');
+        const serviceAccountKey = document.getElementById('serviceAccountKey');
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
+        const testConnectionBtn = document.getElementById('testConnectionBtn');
+
+        // Variables to track state
+        let selectedCampuses = new Set();
+        let isTransferRunning = false;
+        let totalRecordsProcessed = 0;
+        let campusData = {};
+        let statusCheckInterval = null;
+        let selectedTransferType = 'childSchedule'; // Default to child schedule
+
+        // API Endpoints
+        const API_BASE = '';  // Use relative URLs for same-domain
+        const API = {
+            START_TRANSFER: `${API_BASE}/api/start_transfer`,
+            STOP_TRANSFER: `${API_BASE}/api/stop_transfer`,
+            TRANSFER_STATUS: `${API_BASE}/api/transfer_status`,
+            TEST_CONNECTION: `${API_BASE}/api/test_connection`,
+            CAMPUS_LIST: `${API_BASE}/api/campus_list`
+        };
+
+        // Fetch campus list from API
+        async function fetchCampusList() {
+            try {
+                const response = await fetch(API.CAMPUS_LIST);
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (data.success) {
+                    campusData = data.campuses;
+                    initCampusList();
+                    logMessage('Campus list loaded successfully', 'info');
+                } else {
+                    logMessage('Failed to load campus list', 'error');
+                }
+            } catch (error) {
+                logMessage(`Error loading campus list: ${error.message}`, 'error');
+                // Fallback to hardcoded data if API fails
+                campusData = {
+                    'avenue': { id: 14, name: 'Avenue' },
+                    'bedford': { id: 15, name: 'Bedford' },
+                    'bradford': { id: 9, name: 'Bradford' },
+                    'beaches': { id: 7, name: 'Beaches' },
+                    'homestead': { id: 17, name: 'Homestead' },
+                    'wanless': { id: 13, name: 'Wanless' },
+                    'cambridge': { id: 8, name: 'Cambridge' },
+                    'meadowvale': { id: 11, name: 'Meadowvale' },
+                    'heartland': { id: 5, name: 'Heartland' },
+                    'elgin': { id: 3, name: 'Elgin' },
+                    'maple': { id: 1, name: 'Maple' },
+                    'college': { id: 10, name: 'College' },
+                    'churchill': { id: 16, name: 'Churchill' },
+                    'aurora': { id: 12, name: 'Aurora' },
+                    'queen': { id: 4, name: 'Queen' },
+                    'ninth': { id: 2, name: 'Ninth' },
+                    'miltoneast': { id: 18, name: 'Milton East' }
+                };
+                initCampusList();
+            }
+        }
+
+        // Set up transfer type selection
+        transferTypeOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selected class from all options
+                transferTypeOptions.forEach(opt => opt.classList.remove('selected'));
+                
+                // Add selected class to clicked option
+                this.classList.add('selected');
+                
+                // Update selected transfer type
+                selectedTransferType = this.dataset.type;
+                
+                // Show/hide authorization parameters based on selection
+                if (selectedTransferType === 'authorization') {
+                    authorizationParams.classList.add('visible');
+                } else {
+                    authorizationParams.classList.remove('visible');
+                }
+                
+                logMessage(`Selected transfer type: ${selectedTransferType}`, 'info');
+            });
+        });
+
+        // Initialize campus list
+        function initCampusList() {
+            campusList.innerHTML = '';
+            Object.entries(campusData).forEach(([key, data]) => {
+                const campusItem = document.createElement('div');
+                campusItem.className = 'campus-item';
+                campusItem.dataset.campus = key;
+                campusItem.innerHTML = `
+                    <input type="checkbox" id="campus-${key}" data-campus="${key}">
+                    <label for="campus-${key}">${data.name}</label>
+                `;
+                campusList.appendChild(campusItem);
+
+                // Add click event to select the campus
+                campusItem.addEventListener('click', function(e) {
+                    const checkbox = this.querySelector('input[type="checkbox"]');
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                    }
+                    
+                    if (checkbox.checked) {
+                        selectedCampuses.add(key);
+                        this.classList.add('selected');
+                    } else {
+                        selectedCampuses.delete(key);
+                        this.classList.remove('selected');
+                    }
+                    
+                    updateTotalCampuses();
+                });
+            });
+
+            totalCampusesElement.textContent = Object.keys(campusData).length;
+        }
+
+        // Update total campuses display
+        function updateTotalCampuses() {
+            document.getElementById('totalCampuses').textContent = selectedCampuses.size;
+        }
+
+        // Log handler
+        function logMessage(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logConsole.appendChild(logEntry);
+            logConsole.scrollTop = logConsole.scrollHeight;
+        }
+
+        // Start transfer function
+        async function startTransfer() {
+            if (selectedCampuses.size === 0) {
+                logMessage('Please select at least one campus', 'error');
+                return;
+            }
+
+            if (!validateConfig()) {
+                logMessage('Please configure FileMaker and Firebase credentials first', 'error');
+                openTab(null, 'Config');
+                return;
+            }
+
+            // Clear any existing status elements
+            document.querySelectorAll('.campus-status-list').forEach(el => el.remove());
+            
+            // Create a new status list
+            const transferDiv = document.getElementById('Transfer');
+            const statusListDiv = document.createElement('div');
+            statusListDiv.className = 'campus-status-list';
+            statusListDiv.innerHTML = `
+                <div class="campus-status-header">
+                    <div>Campus</div>
+                    <div>Records Retrieved</div>
+                    <div>Records Inserted</div>
+                    <div>Status</div>
+                    <div>Message</div>
+                </div>
+            `;
+            
+            // Add it after the status panel
+            const statusPanel = document.querySelector('.status-panel');
+            statusPanel.parentNode.insertBefore(statusListDiv, statusPanel.nextSibling);
+            
+            // Prepare the data for API
+            const transferData = {
+                campuses: Array.from(selectedCampuses),
+                filemaker_username: filemakerUsername.value,
+                filemaker_password: filemakerPassword.value,
+                service_account_json: serviceAccountKey.value,
+                transfer_type: selectedTransferType
+            };
+            
+            // Add the appropriate Firebase URL based on transfer type
+            if (selectedTransferType === 'childSchedule') {
+                transferData.firebase_url = firebaseUrlSchedule.value;
+            } else if (selectedTransferType === 'authorization') {
+                transferData.firebase_url = firebaseUrlAuth.value;
+                transferData.authorization_template_id = authorizationTemplateId.value;
+            }
+            
+            try {
+                const response = await fetch(API.START_TRANSFER, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(transferData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    logMessage(`${selectedTransferType} data transfer process started successfully`, 'info');
+                    isTransferRunning = true;
+                    startTransferBtn.disabled = true;
+                    stopTransferBtn.disabled = false;
+                    
+                    // Reset counters
+                    totalRecordsProcessed = 0;
+                    recordsProcessedElement.textContent = '0';
+                    inProgressCountElement.textContent = '0';
+                    
+                    // Start checking for status updates
+                    startStatusChecks();
+                } else {
+                    logMessage(`Failed to start transfer: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error starting transfer: ${error.message}`, 'error');
+            }
+        }
+
+        // Stop transfer function
+        async function stopTransfer() {
+            try {
+                const response = await fetch(API.STOP_TRANSFER, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    logMessage('Transfer process stopped by user', 'info');
+                } else {
+                    logMessage(`Failed to stop transfer: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error stopping transfer: ${error.message}`, 'error');
+            }
+            
+            isTransferRunning = false;
+            startTransferBtn.disabled = false;
+            stopTransferBtn.disabled = true;
+            
+            // Stop status checks
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+        }
+
+        // Start periodic status checks
+        function startStatusChecks() {
+            // First check immediately
+            checkTransferStatus();
+            
+            // Then set up interval
+            statusCheckInterval = setInterval(checkTransferStatus, 2000);
+        }
+
+        // Check transfer status
+        async function checkTransferStatus() {
+            try {
+                const response = await fetch(API.TRANSFER_STATUS);
+                const data = await response.json();
+                
+                // Update UI based on status
+                updateStatusUI(data);
+                
+                // If transfer is complete, stop checking
+                if (!data.in_progress) {
+                    if (statusCheckInterval) {
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+                    }
+                    
+                    isTransferRunning = false;
+                    startTransferBtn.disabled = false;
+                    stopTransferBtn.disabled = true;
+                }
+                
+                return data;
+            } catch (error) {
+                logMessage(`Error checking status: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        // Update UI elements based on status
+        function updateStatusUI(statusData) {
+            // Update progress bar
+            const progress = statusData.progress?.progress_percent || 0;
+            progressBar.style.width = `${progress}%`;
+            progressBar.textContent = `${progress}%`;
+            
+            // Update campus status list
+            if (statusData.campus_status) {
+                const statusListDiv = document.querySelector('.campus-status-list');
+                if (statusListDiv) {
+                    // First, make sure we have a header
+                    if (!statusListDiv.querySelector('.campus-status-header')) {
+                        statusListDiv.innerHTML = `
+                            <div class="campus-status-header">
+                                <div>Campus</div>
+                                <div>Records Retrieved</div>
+                                <div>Records Inserted</div>
+                                <div>Status</div>
+                                <div>Message</div>
+                            </div>
+                        `;
+                    }
+                    
+                    // Update or create items for each campus
+                    Object.entries(statusData.campus_status).forEach(([campus, status]) => {
+                        let campusItemEl = document.getElementById(`campus-status-${campus}`);
+                        
+                        if (!campusItemEl) {
+                            // Create a new element if it doesn't exist
+                            campusItemEl = document.createElement('div');
+                            campusItemEl.className = 'campus-status-item';
+                            campusItemEl.id = `campus-status-${campus}`;
+                            statusListDiv.appendChild(campusItemEl);
+                        }
+                        
+                        // Update the status class
+                        campusItemEl.className = 'campus-status-item';
+                        if (status.status === 'completed') {
+                            campusItemEl.classList.add('completed');
+                        } else if (status.status === 'error') {
+                            campusItemEl.classList.add('error');
+                        } else if (status.status === 'processing') {
+                            campusItemEl.classList.add('processing');
+                        }
+                        
+                        // Update the content
+                        const campusName = campusData[campus]?.name || campus;
+                        campusItemEl.innerHTML = `
+                            <div>${campusName}</div>
+                            <div>${status.records_retrieved || 0}</div>
+                            <div>${status.records_inserted || 0}</div>
+                            <div>${status.status || 'pending'}</div>
+                            <div>${status.message || ''}</div>
+                        `;
+                    });
+                }
+            }
+            
+            // Update counters
+            let inProgressCount = 0;
+            let totalProcessedRecords = 0;
+            
+            if (statusData.campus_status) {
+                Object.values(statusData.campus_status).forEach(status => {
+                    if (status.status === 'processing') {
+                        inProgressCount++;
+                    }
+                    totalProcessedRecords += status.records_inserted || 0;
+                });
+            }
+            
+            inProgressCountElement.textContent = inProgressCount;
+            recordsProcessedElement.textContent = totalProcessedRecords;
+            
+            // Log any errors that occurred
+            if (statusData.errors && statusData.errors.length > 0) {
+                statusData.errors.forEach(error => {
+                    // Use a simple string check rather than querySelector:contains
+                    const errorExists = Array.from(logConsole.querySelectorAll('.log-entry')).some(
+                        entry => entry.textContent.includes(error)
+                    );
+                    if (!errorExists) {
+                        logMessage(error, 'error');
+                    }
+                });
+            }
+            
+            // If there's a message in the progress data, log it
+            if (statusData.progress && statusData.progress.message) {
+                const message = statusData.progress.message;
+                // Use a simple string check rather than querySelector:contains
+                const messageExists = Array.from(logConsole.querySelectorAll('.log-entry')).some(
+                    entry => entry.textContent.includes(message)
+                );
+                if (!messageExists) {
+                    logMessage(message, 'info');
+                }
+            }
+        }
+
+        // Validate configuration
+        function validateConfig() {
+            // Basic validation for required fields
+            if (!filemakerUsername.value || !filemakerPassword.value || !serviceAccountKey.value) {
+                return false;
+            }
+            
+            // Check if appropriate Firebase URL is provided based on transfer type
+            if (selectedTransferType === 'childSchedule' && !firebaseUrlSchedule.value) {
+                return false;
+            }
+            
+            if (selectedTransferType === 'authorization' && !firebaseUrlAuth.value) {
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Save configuration
+        function saveConfig() {
+            localStorage.setItem('filemakerUsername', filemakerUsername.value);
+            localStorage.setItem('filemakerPassword', filemakerPassword.value);
+            localStorage.setItem('firebaseUrlSchedule', firebaseUrlSchedule.value);
+            localStorage.setItem('firebaseUrlAuth', firebaseUrlAuth.value);
+            // For security reasons, don't store the service account key in localStorage
+            
+            logMessage('Configuration saved', 'info');
+        }
+
+        // Load configuration
+        function loadConfig() {
+            filemakerUsername.value = localStorage.getItem('filemakerUsername') || '';
+            filemakerPassword.value = localStorage.getItem('filemakerPassword') || '';
+            firebaseUrlSchedule.value = localStorage.getItem('firebaseUrlSchedule') || '';
+            firebaseUrlAuth.value = localStorage.getItem('firebaseUrlAuth') || '';
+        }
+
+        // Test connection
+        async function testConnection() {
+            if (!validateConfig()) {
+                logMessage('Please complete all configuration fields', 'error');
+                return;
+            }
+            
+            logMessage('Testing connection...', 'info');
+            
+            // Determine which Firebase URL to test based on the selected transfer type
+            const firebaseUrl = selectedTransferType === 'childSchedule' 
+                ? firebaseUrlSchedule.value 
+                : firebaseUrlAuth.value;
+            
+            if (!validateConfig()) {
+                logMessage('Please complete all configuration fields', 'error');
+                return;
+            }
+            
+            logMessage('Testing connection...', 'info');
+            
+            const testData = {
+                filemaker_username: filemakerUsername.value,
+                filemaker_password: filemakerPassword.value,
+                firebase_url: firebaseUrl,
+                service_account_json: serviceAccountKey.value,
+                test_campus: 'heartland', // Use a default campus for testing
+                transfer_type: selectedTransferType
+            };
+            
+            try {
+                const response = await fetch(API.TEST_CONNECTION, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(testData)
+                });
+                
+                const result = await response.json();
+                
+                // Handle FileMaker result
+                if (result.filemaker.success) {
+                    logMessage('FileMaker connection successful', 'info');
+                } else {
+                    logMessage(`FileMaker connection failed: ${result.filemaker.message}`, 'error');
+                }
+                
+                // Handle Firebase result
+                if (result.firebase.success) {
+                    logMessage('Firebase connection successful', 'info');
+                } else {
+                    logMessage(`Firebase connection failed: ${result.firebase.message}`, 'error');
+                }
+                
+                // Show overall status
+                if (result.filemaker.success && result.firebase.success) {
+                    showAlert('Both connections successful!', 'success');
+                } else {
+                    showAlert('One or more connections failed. Check the log for details.', 'error');
+                }
+            } catch (error) {
+                logMessage(`Error testing connections: ${error.message}`, 'error');
+                showAlert('Connection test failed. See log for details.', 'error');
+            }
+        }
+
+        // Show alert message
+        function showAlert(message, type = 'info') {
+            // Remove any existing alerts
+            document.querySelectorAll('.alert').forEach(el => el.remove());
+            
+            // Create new alert
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            // Add it to the current tab
+            const activeTab = document.querySelector('.tabcontent[style*="display: block"]');
+            if (activeTab) {
+                activeTab.insertBefore(alertDiv, activeTab.firstChild);
+                
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.parentNode.removeChild(alertDiv);
+                    }
+                }, 5000);
+            }
+        }
+
+        // Tab functionality
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            
+            document.getElementById(tabName).style.display = "block";
+            if (evt) evt.currentTarget.className += " active";
+        }
+
+        // Event listeners
+        selectAllBtn.addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#campusList input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                const campus = checkbox.dataset.campus;
+                selectedCampuses.add(campus);
+                checkbox.closest('.campus-item').classList.add('selected');
+            });
+            updateTotalCampuses();
+        });
+
+        deselectAllBtn.addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#campusList input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+                const campus = checkbox.dataset.campus;
+                selectedCampuses.delete(campus);
+                checkbox.closest('.campus-item').classList.remove('selected');
+            });
+            updateTotalCampuses();
+        });
+
+        startTransferBtn.addEventListener('click', startTransfer);
+        stopTransferBtn.addEventListener('click', stopTransfer);
+        saveConfigBtn.addEventListener('click', saveConfig);
+        testConnectionBtn.addEventListener('click', testConnection);
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchCampusList();
+            loadConfig();
+            logMessage('Application initialized', 'info');
+            
+            // Check if a transfer is already in progress
+            checkTransferStatus().then(data => {
+                if (data && data.in_progress) {
+                    isTransferRunning = true;
+                    startTransferBtn.disabled = true;
+                    stopTransferBtn.disabled = false;
+                    startStatusChecks();
+                    logMessage('Detected an ongoing transfer, resuming status updates', 'info');
+                }
+            }).catch(error => {
+                console.error('Error checking initial status:', error);
+            });
+        });
+    </script>
+</body>
+</html>
