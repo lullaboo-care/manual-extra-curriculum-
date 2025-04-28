@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: lullaboo-data-transfer
+    ports:
+      - "6000:6000"
+    env_file:
+      - .env
+    volumes:
+      - ./public:/app/public
+      - ./logs:/app/logs
+    restart: unless-stopped

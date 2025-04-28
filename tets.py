@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 print("Starting Lullaboo Data Transfer Tool...")
-print("Server will be available at http://localhost:6100")
+print("Server will be available at http://localhost:5000")
 
 app = Flask(__name__, static_folder='public', static_url_path='')
 
@@ -511,11 +511,6 @@ def run_data_transfer(selected_campuses, filemaker_username, filemaker_password,
                 target=process_authorization_campus, 
                 args=(campus, filemaker_username, filemaker_password, authorization_template_id)
             )
-        elif transfer_type == "childSync":
-            thread = threading.Thread(
-                target=process_childsync_campus, 
-                args=(campus, filemaker_username, filemaker_password)
-            )
         else:
             return {"success": False, "message": f"Unknown transfer type: {transfer_type}"}
             
@@ -526,174 +521,6 @@ def run_data_transfer(selected_campuses, filemaker_username, filemaker_password,
         time.sleep(0.5)
     
     return {"success": True, "message": f"{transfer_type} transfer process started"}
-# ------------------------------------------------
-# Child Sync Functions
-# ------------------------------------------------
-
-def build_childsync_endpoints(campus_name):
-    """Build FileMaker API endpoints for child sync"""
-    base_url = f"https://{campus_name}.lullaboo.com/fmi/data/v1/databases/iCare"
-    session_endpoint = f"{base_url}/sessions"
-    find_endpoint = f"{base_url}/layouts/child/_find"
-    return session_endpoint, find_endpoint
-
-def query_child_data(find_endpoint, token, offset=1, limit=100):
-    """Query child records with campusID > 0"""
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "query": [
-            {"campusID": ">0"}
-        ],
-        "limit": limit,
-        "offset": offset
-    }
-
-    response = requests.post(find_endpoint, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()
-
-def get_all_child_data(find_endpoint, token, limit=100):
-    """Retrieve ALL child records by looping with offset/limit"""
-    all_records = []
-    offset = 1
-
-    while True:
-        response_json = query_child_data(find_endpoint, token, offset=offset, limit=limit)
-        data_chunk = response_json["response"].get("data", [])
-
-        if not data_chunk:
-            break
-
-        all_records.extend(data_chunk)
-
-        if len(data_chunk) < limit:
-            break
-
-        offset += limit
-
-    return all_records
-
-def insert_childsync_records_into_rtdb(records, campus_name):
-    """Insert child records into Firebase under /campuses/campus_name/"""
-    ref = db.reference(f"campuses/{campus_name}/")
-    
-    # Get existing data to identify records to delete
-    existing_data = ref.get() or {}
-    
-    # Process new records
-    desired_fields = [
-        "stillRegistered",
-        "childID",
-        "primaryParentID",
-        "campusID",
-        "childNameFirstLast",
-        "subsidyChildID"
-    ]
-    
-    filemaker_ids = set()
-    new_data = {}
-
-    for record in records:
-        field_data = record.get('fieldData', {})
-        child_id = str(field_data.get('childID'))
-        gate_name = field_data.get('childNameFirstLast', 'unknown')
-        unique_key = gate_name.replace(' ', '_') if gate_name else f"child_{child_id}"
-        
-        filemaker_ids.add(unique_key)
-
-        filtered_data = {
-            key: str(field_data.get(key)) if key == "childID" and field_data.get(key) is not None else field_data.get(key)
-            for key in desired_fields if key in field_data
-        }
-
-        new_data[unique_key] = filtered_data
-    
-    # Determine which keys should be deleted
-    existing_keys = set(existing_data.keys())
-    keys_to_remove = existing_keys - filemaker_ids
-    
-    total_deleted = 0
-    for key in keys_to_remove:
-        ref.child(key).delete()
-        total_deleted += 1
-    
-    # Update with new records
-    ref.update(new_data)
-    
-    return len(new_data), total_deleted
-
-def process_childsync_campus(campus, filemaker_username, filemaker_password):
-    """Process child sync data for a single campus and update progress"""
-    global campus_progress, transfer_progress
-    
-    # Update progress status
-    campus_progress[campus] = {
-        "status": "processing",
-        "message": f"Starting child sync process for {campus}...",
-        "records_retrieved": 0,
-        "records_inserted": 0,
-        "records_deleted": 0
-    }
-    
-    try:
-        session_endpoint, find_endpoint = build_childsync_endpoints(campus)
-        
-        # Get FileMaker token
-        token = get_filemaker_token(session_endpoint, filemaker_username, filemaker_password)
-        campus_progress[campus]["message"] = f"Acquired token for {campus}, retrieving child records..."
-        
-        # Get all child data
-        records = get_all_child_data(find_endpoint, token, limit=100)
-        total_recs = len(records)
-        campus_progress[campus]["records_retrieved"] = total_recs
-        campus_progress[campus]["message"] = f"Retrieved {total_recs} child records for {campus}, processing data..."
-        
-        # Process records if any were found
-        if records:
-            inserted, deleted = insert_childsync_records_into_rtdb(records, campus)
-            campus_progress[campus]["records_inserted"] = inserted
-            campus_progress[campus]["records_deleted"] = deleted
-            campus_progress[campus]["status"] = "completed"
-            campus_progress[campus]["message"] = f"Completed processing {campus}. Inserted {inserted} records, deleted {deleted} outdated records."
-        else:
-            campus_progress[campus]["status"] = "completed"
-            campus_progress[campus]["message"] = f"No child records found for {campus}."
-        
-        # Update overall progress
-        completed_campuses = sum(1 for c in campus_progress if campus_progress[c]["status"] in ["completed", "error"])
-        total_campuses = len(transfer_progress["selected_campuses"])
-        transfer_progress["progress_percent"] = int((completed_campuses / total_campuses) * 100)
-        
-    except requests.exceptions.HTTPError as http_err:
-        error_msg = f"HTTP error for '{campus}': {http_err}"
-        logger.error(error_msg)
-        error_log.append(error_msg)
-        campus_progress[campus]["status"] = "error"
-        campus_progress[campus]["message"] = error_msg
-    except Exception as e:
-        error_msg = f"Error processing '{campus}': {e}"
-        logger.error(error_msg)
-        error_log.append(error_msg)
-        campus_progress[campus]["status"] = "error"
-        campus_progress[campus]["message"] = error_msg
-    
-    # Update overall progress regardless of success/failure
-    completed_campuses = sum(1 for c in campus_progress if campus_progress[c]["status"] in ["completed", "error"])
-    total_campuses = len(transfer_progress["selected_campuses"])
-    transfer_progress["progress_percent"] = int((completed_campuses / total_campuses) * 100)
-    
-    # Check if all campuses are done
-    if completed_campuses == total_campuses:
-        transfer_progress["status"] = "completed"
-        transfer_progress["end_time"] = time.time()
-        transfer_progress["duration"] = transfer_progress["end_time"] - transfer_progress["start_time"]
-        transfer_progress["message"] = f"Transfer completed in {transfer_progress['duration']:.2f} seconds"
-        global transfer_in_progress
-        transfer_in_progress = False
 
 # ------------------------------------------------
 # Flask Routes
@@ -890,4 +717,4 @@ def get_campus_list():
     })
 
 if __name__ == '__main__':
-    app.run(debug=True, port=6100)  # Change port to 6000 to avoid conflict with other services
+    app.run(debug=True, port=6000)  # Change port to 6000 to avoid conflict with other services
