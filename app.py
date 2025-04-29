@@ -12,6 +12,7 @@ import threading
 import time
 import logging
 from flask import Flask, send_from_directory
+from firebase_config import SERVICE_ACCOUNT_CONFIG
 
 
 # Configure logging
@@ -66,8 +67,8 @@ firebase_app = None
 # Common Helper Functions
 # ------------------------------------------------
 
-def initialize_firebase(database_url, service_account_json):
-    """Initialize Firebase with the provided credentials"""
+def initialize_firebase(database_url):
+    """Initialize Firebase with the service account credentials"""
     global firebase_app
     
     # If firebase_app already exists, delete it
@@ -77,12 +78,12 @@ def initialize_firebase(database_url, service_account_json):
         except:
             pass
     
-    # Create a temporary file for the service account key
-    temp_file_path = 'temp_service_account.json'
-    with open(temp_file_path, 'w') as f:
-        f.write(service_account_json)
-    
     try:
+        # Create a temporary file for the service account key
+        temp_file_path = 'temp_service_account.json'
+        with open(temp_file_path, 'w') as f:
+            json.dump(SERVICE_ACCOUNT_CONFIG, f)
+        
         cred = credentials.Certificate(temp_file_path)
         firebase_app = firebase_admin.initialize_app(cred, {
             'databaseURL': database_url
@@ -719,65 +720,57 @@ def internal_server_error(e):
 
 @app.route('/api/start_transfer', methods=['POST'])
 def start_transfer():
-    """Start the data transfer process"""
+    global transfer_in_progress, transfer_progress, campus_progress, error_log
+    
     if transfer_in_progress:
         return jsonify({
-            "success": False,
-            "message": "A transfer is already in progress"
+            'success': False,
+            'message': 'A transfer is already in progress'
         })
     
-    data = request.json
+    data = request.get_json()
+    
+    # Extract data from request
     selected_campuses = data.get('campuses', [])
-    filemaker_username = data.get('filemaker_username', '')
-    filemaker_password = data.get('filemaker_password', '')
-    firebase_url = data.get('firebase_url', '')
-    service_account_json = data.get('service_account_json', '')
+    filemaker_username = data.get('filemaker_username')
+    filemaker_password = data.get('filemaker_password')
+    firebase_url = data.get('firebase_url')
     transfer_type = data.get('transfer_type', 'childSchedule')
-    authorization_template_id = data.get('authorization_template_id', None)
+    authorization_template_id = data.get('authorization_template_id')
     
-    # Validate inputs
-    if not selected_campuses:
+    # Validate required fields
+    if not all([selected_campuses, filemaker_username, filemaker_password, firebase_url]):
         return jsonify({
-            "success": False,
-            "message": "No campuses selected"
-        })
-    
-    if not filemaker_username or not filemaker_password:
-        return jsonify({
-            "success": False,
-            "message": "FileMaker credentials required"
-        })
-        
-    if not firebase_url or not service_account_json:
-        return jsonify({
-            "success": False,
-            "message": "Firebase configuration required"
-        })
-    
-    # For authorization transfer, require template ID
-    if transfer_type == "authorization" and not authorization_template_id:
-        return jsonify({
-            "success": False,
-            "message": "Authorization Template ID required for authorization transfer"
+            'success': False,
+            'message': 'Missing required fields'
         })
     
     # Initialize Firebase
-    firebase_init_success = initialize_firebase(firebase_url, service_account_json)
-    if not firebase_init_success:
+    if not initialize_firebase(firebase_url):
         return jsonify({
-            "success": False,
-            "message": "Failed to initialize Firebase"
+            'success': False,
+            'message': 'Failed to initialize Firebase connection'
         })
     
-    # Start transfer process
-    result = run_data_transfer(
-        selected_campuses, 
-        filemaker_username, 
-        filemaker_password, 
-        transfer_type,
-        authorization_template_id
+    # Reset progress tracking
+    transfer_progress = {
+        'progress_percent': 0,
+        'message': 'Starting transfer...'
+    }
+    campus_progress = {}
+    error_log = []
+    
+    # Start transfer in a new thread
+    transfer_thread = threading.Thread(
+        target=run_data_transfer,
+        args=(selected_campuses, filemaker_username, filemaker_password, transfer_type, authorization_template_id)
     )
-    return jsonify(result)
+    transfer_thread.start()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Transfer started successfully'
+    })
 
 @app.route('/api/stop_transfer', methods=['POST'])
 def stop_transfer():
@@ -811,62 +804,59 @@ def transfer_status():
 
 @app.route('/api/test_connection', methods=['POST'])
 def test_connection():
-    """Test connections to FileMaker and Firebase"""
-    data = request.json
-    filemaker_username = data.get('filemaker_username', '')
-    filemaker_password = data.get('filemaker_password', '')
-    firebase_url = data.get('firebase_url', '')
-    service_account_json = data.get('service_account_json', '')
-    test_campus = data.get('test_campus', 'heartland')  # Use a default campus for testing
-    transfer_type = data.get('transfer_type', 'childSchedule')  # Get the transfer type
+    data = request.get_json()
     
-    results = {
-        "filemaker": {"success": False, "message": ""},
-        "firebase": {"success": False, "message": ""}
+    # Extract credentials
+    filemaker_username = data.get('filemaker_username')
+    filemaker_password = data.get('filemaker_password')
+    firebase_url = data.get('firebase_url')
+    test_campus = data.get('test_campus', 'heartland')
+    transfer_type = data.get('transfer_type', 'childSchedule')
+    
+    result = {
+        'filemaker': {'success': False, 'message': ''},
+        'firebase': {'success': False, 'message': ''}
     }
     
-    # Test FileMaker connection based on transfer type
+    # Test FileMaker connection
     try:
-        if not filemaker_username or not filemaker_password:
-            results["filemaker"]["message"] = "FileMaker credentials required"
-        else:
-            if transfer_type == 'childSchedule':
-                # Test iCare database for Child Schedule
-                session_endpoint, _ = build_childschedule_endpoints(test_campus)
-                token = get_filemaker_token(session_endpoint, filemaker_username, filemaker_password)
-                if token:
-                    results["filemaker"]["success"] = True
-                    results["filemaker"]["message"] = "FileMaker connection successful for Child Schedule database"
-                else:
-                    results["filemaker"]["message"] = "FileMaker connection failed for Child Schedule database"
-                    
-            elif transfer_type == 'authorization':
-                # Test iCareMobileAccess database for Authorization
-                session_endpoint, _ = build_authorization_endpoints(test_campus)
-                token = get_filemaker_token(session_endpoint, filemaker_username, filemaker_password)
-                if token:
-                    results["filemaker"]["success"] = True
-                    results["filemaker"]["message"] = "FileMaker connection successful for Authorization database"
-                else:
-                    results["filemaker"]["message"] = "FileMaker connection failed for Authorization database"
+        if transfer_type == 'childSchedule':
+            session_endpoint, _ = build_childschedule_endpoints(test_campus)
+        elif transfer_type == 'authorization':
+            session_endpoint, _ = build_authorization_endpoints(test_campus)
+        else:  # childSync
+            session_endpoint, _ = build_childsync_endpoints(test_campus)
+            
+        get_filemaker_token(session_endpoint, filemaker_username, filemaker_password)
+        result['filemaker'] = {
+            'success': True,
+            'message': 'Successfully connected to FileMaker'
+        }
     except Exception as e:
-        results["filemaker"]["message"] = f"FileMaker connection failed: {str(e)}"
+        result['filemaker'] = {
+            'success': False,
+            'message': str(e)
+        }
     
     # Test Firebase connection
     try:
-        if not firebase_url or not service_account_json:
-            results["firebase"]["message"] = "Firebase configuration required"
+        if initialize_firebase(firebase_url):
+            result['firebase'] = {
+                'success': True,
+                'message': 'Successfully connected to Firebase'
+            }
         else:
-            firebase_init_success = initialize_firebase(firebase_url, service_account_json)
-            if firebase_init_success:
-                results["firebase"]["success"] = True
-                results["firebase"]["message"] = "Firebase connection successful"
-            else:
-                results["firebase"]["message"] = "Firebase connection failed"
+            result['firebase'] = {
+                'success': False,
+                'message': 'Failed to initialize Firebase connection'
+            }
     except Exception as e:
-        results["firebase"]["message"] = f"Firebase connection failed: {str(e)}"
+        result['firebase'] = {
+            'success': False,
+            'message': str(e)
+        }
     
-    return jsonify(results)
+    return jsonify(result)
 
 @app.route('/api/campus_list', methods=['GET'])
 def get_campus_list():
